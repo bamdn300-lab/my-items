@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>室温モニター</title>
+  <title>宅配ボックスLINE通知</title>
 </head>
 
   
 <body>
 
-<h1>室温モニター #001</h1>
+<h1>item #001</h1>
 
-<p><strong>種類：</strong>ESP32室温モニター</p>
+<p><strong>種類：</strong>ESP32宅配ボックス通知</p>
 
-<p><strong>型番：</strong>ESP32 DevKitC　4号機</p>
+<p><strong>型番：</strong>ESP32 DevKitC　３号機</p>
 
-<p><strong>ソフト：</strong>[libra]desktop/01_Projects/Arduino/ESP32-sketchX>THERMO4_9/THERMO4_9.ino</p> 
+<p><strong>ソフト：</strong>[libra]desktop>01_Projects>Arduino>ESP32-sketchX>#ESP32_Recent>ESP32_A_step1_Switch2_FIELD.ino</p> 
 
 <p><strong>IPアドレス：</strong>192.168.1.32</p>
 
-<p><strong>用途：</strong>温度測定</p>  
+<p><strong>用途：</strong>宅配ボックス蓋開放によりLINE送信</p>  
 
-<p><strong>作成日：</strong>2026年8月1日</p>
+<p><strong>作成日：</strong>2026年8月2日</p>
 
 <hr>
 
