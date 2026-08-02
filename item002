@@ -9,15 +9,13 @@
   
 <body>
 
-<h1>item #001</h1>
+<h1>item #002</h1>
 
 <p><strong>種類：</strong>ESP32宅配ボックス通知</p>
 
 <p><strong>型番：</strong>ESP32 DevKitC　３号機</p>
 
 <p><strong>ソフト：</strong>[libra]desktop>01_Projects>Arduino>ESP32-sketchX>#ESP32_Recent>ESP32_A_step1_Switch2_FIELD.ino</p> 
-
-<p><strong>IPアドレス：</strong>192.168.1.32</p>
 
 <p><strong>用途：</strong>宅配ボックス蓋開放によりLINE送信</p>  
 
