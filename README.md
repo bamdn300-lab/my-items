@@ -6,8 +6,8 @@
 
 このgithubへのアクセス：Googleのアクセスによる
 githubのURL: https://bamdn300-lab.github.io
-Repositoryの名前：　my-items
-folderの名前：　item001など
-itemの名前：　item001.htmlなど
+Repositoryの名前：my-items
+folderの名前：item001など
+itemの名前：item001.htmlなど
 
    
