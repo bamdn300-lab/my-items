@@ -14,4 +14,4 @@
 - githubのURL-- https://bamdn300-lab.github.io  　　　
 - Repositoryの名前--my-items  　　　
 - folderの名前--item001など  　　　
-- fileの名前--BACKSTAGE.md, item001.htmlなど  　　
+- fileの名前--item001.html(whatを示す),BACKSTAGE.md（howを示す) 　　
