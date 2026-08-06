@@ -1,1 +1,667 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head?
+  <meta charset="UTF-8">
+  <title>#004 室温モニターシステム V4_10</title>
+</head>
+<body>
+<h1>#004 室温モニターシステム V4_10</h1> 
+<h1>概要</h1>
+
+室温を温度センサーで測定して、48時間表示でグラフ表示する。家のWiFiからブラウザで閲覧できる。。
+<h1>仕組み</h1>
+<h2>温度測定メカニズム</h2>
+GPIO15に温度センサーDS18B20を接続する。
+<h2>WiFi構築メカニズム(Wi-Fiプロビジョニング）</h2>
+# ESP32室温モニター
+
+##テスト条件記録機能 開発まとめ
+
+### 1. 目的
+
+室温モニターのテスト時に、
+
+* 冷房をONにした
+* 除湿をONにした
+* 電源をOFFにした
+* 設定温度を変更した
+
+などの**テスト条件をブラウザから1行ずつ入力して記録する**機能を追加した。
+
+将来的には、これらの記録を温度グラフと時刻で関連付け、
+
+> 「この温度変化は何をした結果なのか」
+
+をグラフ上で確認できるようにする予定。
+
+ただし、今回の開発では**グラフとの関連付けは行わず、テスト条件の保存・読み出し・全消去までを完成させた。**
+
+---
+
+# 2. ブラウザ側の機能
+
+室温モニター画面に、テスト条件入力欄を追加。
+
+```html
+<div id="testRecord">
+
+  <h3>テスト条件</h3>
+
+  <input
+    type="text"
+    id="testInput"
+    placeholder="例：9:30 冷房ON 28°C"
+  >
+
+  <button onclick="addTestRecord()">追加</button>
+
+  <div id="testOutput"></div>
+
+  <br>
+
+  <button onclick="clearTestRecords()">
+    テスト記録をすべて消去
+  </button>
+
+</div>
+```
+
+### 入力例
+
+1回目：
+
+```text
+9:30 冷房ON 28°C
+```
+
+2回目：
+
+```text
+11:00 除湿ON
+```
+
+3回目：
+
+```text
+12:00 電源OFF
+```
+
+「追加」を押すたびに、画面には1行ずつ追加表示される。
+
+```text
+9:30 冷房ON 28°C
+11:00 除湿ON
+12:00 電源OFF
+```
+
+---
+
+# 3. ブラウザからESP32への送信
+
+「追加」ボタンを押すと、JavaScriptの `fetch()` を使ってESP32へ送信。
+
+```javascript
+fetch("/addTest", {
+  method: "POST",
+  headers: {
+    "Content-Type": "text/plain"
+  },
+  body: text
+});
+```
+
+送信先：
+
+```text
+/addTest
+```
+
+HTTPメソッド：
+
+```text
+POST
+```
+
+送信データ：
+
+```text
+text/plain
+```
+
+---
+
+# 4. ESP32側のNVS構成
+
+既存のNVSとは分離して、テスト条件専用の `Preferences` を使用。
+
+既存：
+
+```cpp
+Preferences prefsWifi;
+```
+
+追加：
+
+```cpp
+Preferences prefsTest;
+```
+
+`setup()` で、
+
+```cpp
+prefsWifi.begin("wifi", false);
+prefsConfig.begin("offset", false);
+prefsTest.begin("testlog", false);
+```
+
+としている。
+
+したがって、NVS上では、
+
+```text
+wifi
+ ├─ ssid
+ └─ password
+
+offset
+ └─ 温度補正
+
+testlog
+ ├─ count
+ ├─ test0
+ ├─ test1
+ ├─ test2
+ └─ ...
+```
+
+という構成になっている。
+
+---
+
+# 5. テスト条件の保存方式
+
+テスト条件は、
+
+```text
+count
+test0
+test1
+test2
+...
+```
+
+という形式で保存。
+
+例えば3件の場合：
+
+```text
+count = 3
+
+test0 = "9:30 冷房ON 28°C"
+test1 = "11:00 除湿ON"
+test2 = "12:00 電源OFF"
+```
+
+新しい記録を追加すると、
+
+```cpp
+int count = prefsTest.getInt("count", 0);
+```
+
+で現在の件数を取得し、
+
+```cpp
+String key = "test" + String(count);
+```
+
+で保存キーを作成。
+
+その後、
+
+```cpp
+prefsTest.putString(key.c_str(), text);
+prefsTest.putInt("count", count + 1);
+```
+
+としている。
+
+---
+
+# 6. ESP32側 `/addTest`
+
+`startStaServer()` に以下を追加。
+
+```cpp
+staServer.on("/addTest", HTTP_POST, staHandleAddTest);
+```
+
+保存処理：
+
+```cpp
+void staHandleAddTest() {
+
+  String text = staServer.arg("plain");
+
+  Serial.println("---- ADD TEST ----");
+  Serial.println("text = [" + text + "]");
+
+  if (text.length() == 0) {
+    staServer.send(400, "text/plain", "EMPTY");
+    return;
+  }
+
+  int count = prefsTest.getInt("count", 0);
+
+  String key = "test" + String(count);
+
+  prefsTest.putString(key.c_str(), text);
+
+  prefsTest.putInt("count", count + 1);
+
+  Serial.println("saved key = " + key);
+  Serial.println("saved text = [" + text + "]");
+  Serial.println("count = " + String(count + 1));
+  Serial.println("------------------");
+
+  staServer.send(200, "text/plain", "OK");
+}
+```
+
+---
+
+# 7. 動作確認：保存
+
+例えば、
+
+```text
+9:30 冷房ON 28°C
+11:00 除湿ON
+12:00 電源OFF
+```
+
+と3件入力すると、シリアルモニターで、
+
+```text
+saved key = test0
+saved key = test1
+saved key = test2
+```
+
+となることを確認。
+
+ESP32をリセットした後、新しい記録を追加すると、
+
+```text
+saved key = test3
+```
+
+となった。
+
+これにより、
+
+**ESP32をリセットしてもNVSの `count` が保持されていることを確認済み。**
+
+---
+
+# 8. NVSからの読み出し
+
+ESP32側に、
+
+```cpp
+staServer.on("/testlog", HTTP_GET, staHandleTestLog);
+```
+
+を追加。
+
+`/testlog` にアクセスすると、NVSの内容をJSON形式で返す。
+
+例えば、
+
+```json
+{
+  "count":3,
+  "data":[
+    "9:30 冷房ON 28°C",
+    "11:00 除湿ON",
+    "12:00 電源OFF"
+  ]
+}
+```
+
+となる。
+
+---
+
+# 9. ブラウザ起動時の復元
+
+JavaScriptで、
+
+```javascript
+function loadTestRecords() {
+
+  fetch("/testlog")
+    .then(response => response.json())
+    .then(data => {
+
+      const output = document.getElementById("testOutput");
+
+      output.innerHTML = "";
+
+      data.data.forEach(text => {
+
+        const line = document.createElement("div");
+
+        line.textContent = text;
+
+        output.appendChild(line);
+      });
+
+    })
+    .catch(error => {
+
+      console.log("テスト条件の読み出しエラー:", error);
+
+    });
+}
+```
+
+を使用。
+
+ページ読み込み時に、
+
+```javascript
+loadTestRecords();
+```
+
+を実行。
+
+これにより、
+
+**ESP32をリセット → ブラウザで室温モニターを開く**
+
+だけで、NVSに保存されている過去のテスト条件が自動的に画面へ復元される。
+
+この動作は実機で確認済み。
+
+---
+
+# 10. 全消去機能
+
+テストを新しく開始するときのために、テスト条件をすべて消去する機能を追加。
+
+ブラウザに、
+
+```text
+テスト記録をすべて消去
+```
+
+ボタンを追加。
+
+押すと、
+
+```text
+テスト記録をすべて消去しますか？
+```
+
+という確認ダイアログを表示。
+
+---
+
+# 11. ESP32側 `/clearTestLog`
+
+`startStaServer()` に、
+
+```cpp
+staServer.on("/clearTestLog", HTTP_POST, staHandleClearTestLog);
+```
+
+を追加。
+
+消去処理：
+
+```cpp
+void staHandleClearTestLog() {
+
+  Serial.println("---- CLEAR TEST LOG ----");
+
+  int count = prefsTest.getInt("count", 0);
+
+  for (int i = 0; i < count; i++) {
+
+    String key = "test" + String(i);
+
+    prefsTest.remove(key.c_str());
+
+    Serial.println("removed: " + key);
+  }
+
+  prefsTest.putInt("count", 0);
+
+  Serial.println("test log cleared");
+  Serial.println("------------------------");
+
+  staServer.send(200, "text/plain", "OK");
+}
+```
+
+---
+
+# 12. ブラウザ側の全消去処理
+
+```javascript
+function clearTestRecords() {
+
+  if (!confirm("テスト記録をすべて消去しますか？")) {
+    return;
+  }
+
+  fetch("/clearTestLog", {
+    method: "POST"
+  })
+  .then(response => {
+
+    if (!response.ok) {
+      throw new Error("消去に失敗しました");
+    }
+
+    return response.text();
+
+  })
+  .then(result => {
+
+    document.getElementById("testOutput").innerHTML = "";
+
+    console.log("テスト記録を消去しました");
+
+  })
+  .catch(error => {
+
+    console.log("消去エラー:", error);
+    alert("テスト記録の消去に失敗しました");
+
+  });
+}
+```
+
+---
+
+# 13. 全消去の動作確認
+
+実機で以下を確認済み。
+
+例えば、
+
+```text
+test0
+test1
+test2
+```
+
+が保存されている状態で「テスト記録をすべて消去」を実行。
+
+その後ESP32をリセット。
+
+→ 以前の記録は復元されない。
+
+その後、新しい記録を追加。
+
+→
+
+```text
+saved key = test0
+count = 1
+```
+
+となる。
+
+つまり、
+
+**全消去後は `test0` から新しいテスト記録を開始できることを確認済み。**
+
+---
+
+# 14. 既存機能への影響
+
+今回の機能は既存機能と分離している。
+
+| NVS                      | 用途                         |
+| ------------------------ | -------------------------- |
+| `wifi` / `prefsWifi`     | SSID・パスワード                 |
+| `offset` / `prefsConfig` | 温度補正値                      |
+| `testlog` / `prefsTest`  | テスト条件                      |
+| 温度ログ                     | `timeLog[]`, `tempLog[]` 等 |
+
+全消去処理では、
+
+```cpp
+prefsTest.remove(...)
+```
+
+だけを使用しているため、
+
+**Wi-Fi設定、温度補正、温度ログには影響しない。**
+
+また、既存の温度ログ吸い出し用
+
+```cpp
+staHandleDump()
+```
+
+も変更していない。
+
+---
+
+# 15. 現在完成しているHTTPエンドポイント
+
+現在のテスト条件機能については、
+
+```text
+POST /addTest
+```
+
+→ ブラウザから1件追加してNVSへ保存
+
+```text
+GET /testlog
+```
+
+→ NVSから全テスト条件を読み出す
+
+```text
+POST /clearTestLog
+```
+
+→ テスト条件をすべて削除
+
+となっている。
+
+---
+
+# 16. 現在の完成状態
+
+現在、以下の一連の動作が実機で確認済み。
+
+```text
+ブラウザ
+   │
+   │ ① 文字列入力
+   ↓
+「追加」
+   │
+   ↓
+POST /addTest
+   │
+   ↓
+ESP32
+   │
+   ↓
+NVS testlog
+   │
+   ├── test0
+   ├── test1
+   └── test2
+```
+
+ESP32をリセットしても、
+
+```text
+NVS testlog
+   │
+   ↓
+GET /testlog
+   │
+   ↓
+ブラウザ
+   │
+   ↓
+保存済み記録を復元表示
+```
+
+できる。
+
+さらに、
+
+```text
+「テスト記録をすべて消去」
+        ↓
+POST /clearTestLog
+        ↓
+test0, test1, test2 ... 削除
+        ↓
+count = 0
+```
+
+も実機確認済み。
+
+---
+
+# 17. 今後の開発予定
+
+今回の段階では、**温度グラフとの関連付けはまだ行わない。**
+
+次の候補は、
+
+1. テスト条件の個別削除
+2. テスト記録の編集
+3. テスト条件に正確な時刻情報を持たせる
+4. 温度ログの時刻とテスト条件の時刻を関連付ける
+5. 温度グラフ上に「冷房ON」「除湿ON」などを表示
+
+の順で検討する。
+
+最終的には、
+
+> **「この温度変化は何をした結果なのか」を温度グラフ上で確認できる室温モニター**
+
+を目指す。
+ 
+<h2>グラフ表示メカニズム</h2>
+  >p?ブラウザ上で48時間分の室温データが表示される。固定で昨日の00:00から23:59、今日の00:00から23:59の室温データ
+  が表示される。昨日分は点線で表示される。ESP32でグラフを作成してスマホに表示するのではなく、ブラウザにグラフの枠データと
+  温度の線分データを送信し、ブラウザ上で線分を描画する。</p>
+  <hr>
+<a href="item002.html">元に戻る</a>
+<a href="working.html">作業用ページ</a>
+</body>
+</html>
